@@ -9,7 +9,6 @@ A research prototype that segments **clot**, **edema** and the **midline structu
 | File | Purpose |
 |---|---|
 | `train_unet.py` | Train one U-Net (`--target clot`, `edema` or `midline`) |
-| `train_tumor.py` | Train a multi-task U-Net: tumour mask + tumour type |
 | `predict.py` | Run all three models on images; save overlays and `measurements.csv` |
 | `measurements.py` | Areas, hemisphere side and midline-shift estimate (pure NumPy/OpenCV) |
 | `DeepLearningModelsh5files/` | Earlier trained models (`.h5`) and sample images |
@@ -44,26 +43,6 @@ python train_unet.py --images images/ --masks masks/ --target edema --patient-re
 - Exact duplicate images are removed before splitting.
 - Use `--patient-regex` so that all slices from one patient stay in the same split. Without it, slices from one patient can leak between train and test and inflate scores.
 - The best model (by validation Dice) is saved as `models/unet_<target>_best.keras`, and the **test-set Dice** is written to `models/test_results_<target>.json`.
-
-## Brain tumour model (segmentation + type)
-
-`train_tumor.py` trains **one multi-task U-Net**: a shared encoder with two heads.
-
-| Head | Output | Loss |
-|---|---|---|
-| Segmentation (U-Net decoder with skip links) | Tumour mask | Dice + BCE |
-| Classification (global pooling → dense → softmax) | Meningioma / glioma / pituitary | Cross-entropy (weight 0.5) |
-
-**Data:** Jun Cheng's Figshare brain tumour dataset (CC BY 4.0): 3,064 T1 contrast-enhanced slices from 233 patients, each with a radiologist-drawn tumour mask, tumour type and patient ID. <https://doi.org/10.6084/m9.figshare.1512427>. Every slice contains a tumour, so the model has no "no tumour" class.
-
-```bash
-python train_tumor.py --figshare-dir path/to/mat_files --out models
-# or your own data:
-python train_tumor.py --images imgs/ --masks masks/ --labels-csv labels.csv   # columns: filename,label,patient_id
-```
-
-- The split is always **by patient** (70/15/15), so no patient appears in both training and test data. Expect lower scores than papers that split by slice.
-- Test results (Dice overall and per type, accuracy, macro-F1, confusion matrix) are saved to `models/test_results_tumor.json`.
 
 ## Prediction
 
