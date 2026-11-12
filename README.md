@@ -1,156 +1,76 @@
-# 🧠 U-Net Based Midline Shift & Edema Segmentation from Brain MRI
+# U-Net Segmentation of Clot, Edema and Midline Shift on Brain MRI Slices
 
-This repository contains a deep learning pipeline for **automatic midline shift / edema segmentation** from 2D brain MRI slices using a **U-Net architecture** implemented in **TensorFlow/Keras**. The project is designed for medical image analysis workflows, particularly in **stroke and neuroimaging applications**.
+A research prototype that segments **clot**, **edema** and the **midline structure** on 2D axial brain MRI slices with three U-Net models (TensorFlow/Keras), then reports simple measurements.
 
----
+> ⚠️ Research and education only. Not validated for clinical use.
 
-## 📌 Project Overview
+## Repository structure
 
-Manual delineation of edema and midline shift regions in brain MRI is time-consuming and subject to inter-observer variability. This project addresses the problem by leveraging a **U-Net-based semantic segmentation model** to automatically generate accurate binary masks from grayscale MRI slices.
+| File | Purpose |
+|---|---|
+| `train_unet.py` | Train one U-Net (`--target clot`, `edema` or `midline`) |
+| `predict.py` | Run all three models on images; save overlays and `measurements.csv` |
+| `measurements.py` | Areas, hemisphere side and midline-shift estimate (pure NumPy/OpenCV) |
+| `DeepLearningModelsh5files/` | Earlier trained models (`.h5`) and sample images |
+| `requirements.txt` | Python dependencies |
 
-### Key Features
+## Data layout
 
-* ✅ Single-class binary segmentation (edema / midline shift)
-* ✅ U-Net encoder–decoder architecture
-* ✅ Dice Coefficient–based evaluation
-* ✅ Robust preprocessing and normalization
-* ✅ Train/validation split with model checkpointing
-* ✅ Designed for medical imaging datasets
-
----
-
-## 🧠 Model Architecture
-
-The segmentation model is based on **U-Net**, a widely used convolutional neural network for biomedical image segmentation.
-
-**Architecture Highlights:**
-
-* Encoder–decoder structure
-* Skip connections for spatial feature preservation
-* Convolution + ReLU blocks
-* Sigmoid activation for binary mask output
-
----
-
-## 📂 Dataset Structure
-
-The model expects **2D MRI slices** and corresponding **binary segmentation masks** stored as image files.
+Images and masks are 2D slices with **matching filenames**:
 
 ```
-dataset/
-├── edema_original/
-│   ├── image_001.png
-│   ├── image_002.png
-│   └── ...
-└── midline_shift_mask/
-    ├── image_001.png
-    ├── image_002.png
-    └── ...
+images/  P01_s12.png  P01_s13.png ...
+masks/   P01_s12.png  P01_s13.png ...   (white = target, black = background)
 ```
 
-* Images: Grayscale MRI slices
-* Masks: Binary masks (0 = background, 1 = edema/midline shift)
-* Image–mask filenames must match
-
----
-
-## ⚙️ Preprocessing Pipeline
-
-The following preprocessing steps are applied:
-
-1. **Grayscale loading** of MRI slices
-2. **Resizing** to `256 × 256`
-3. **Intensity normalization** to `[0, 1]`
-4. **Binary thresholding** of masks
-5. **Channel expansion** for CNN compatibility
-6. **Train–validation split (80/20)**
-
----
-
-## 🏋️ Training Configuration
-
-| Parameter     | Value                             |
-| ------------- | --------------------------------- |
-| Input Size    | 256 × 256 × 1                     |
-| Batch Size    | 8                                 |
-| Optimizer     | Adam                              |
-| Learning Rate | 1e-4                              |
-| Loss Function | Binary Cross-Entropy / Dice-based |
-| Epochs        | Up to 300 (with Early Stopping)   |
-| Metrics       | Dice Coefficient                  |
-
----
-
-## 📊 Evaluation Metric
-
-### Dice Coefficient
-
-Measures overlap between predicted and ground-truth masks:
-
-```
-Dice = (2 × |Prediction ∩ GroundTruth|) / (|Prediction| + |GroundTruth|)
-```
-
-* Dice = 1.0 → Perfect segmentation
-* Dice ≥ 0.9 → Clinically strong performance
-
----
-
-## 🚀 Training the Model
+## Training
 
 ```bash
-python train_unet.py
+pip install -r requirements.txt
+python train_unet.py --images images/ --masks masks/ --target edema --patient-regex '^(P\d+)_'
 ```
 
-The trained model will be saved as:
+| Setting | Value |
+|---|---|
+| Input | 256 × 256 × 1, intensity scaled to [0, 1] |
+| Model | 4-level U-Net with batch normalisation (base 32 filters) |
+| Loss | Binary cross-entropy + Dice loss |
+| Optimiser | Adam, learning rate 1e-4, halved on plateau |
+| Epochs | Up to 300, early stopping (patience 30) on validation Dice |
+| Augmentation | Left–right flip, small brightness/contrast changes |
+| Split | 70 / 15 / 15 train / validation / **held-out test** |
 
+- Exact duplicate images are removed before splitting.
+- Use `--patient-regex` so that all slices from one patient stay in the same split. Without it, slices from one patient can leak between train and test and inflate scores.
+- The best model (by validation Dice) is saved as `models/unet_<target>_best.keras`, and the **test-set Dice** is written to `models/test_results_<target>.json`.
+
+## Prediction
+
+```bash
+python predict.py --images DeepLearningModelsh5files/new_images/new_images \
+  --clot-model DeepLearningModelsh5files/unet_clot_segmentation_single_class_1000.h5 \
+  --edema-model DeepLearningModelsh5files/unet_clot_segmentation_single_class_edema_1000.h5 \
+  --midline-model DeepLearningModelsh5files/unet_clot_segmentation_single_class_midline_1000.h5
 ```
-best_midline_unet.h5
-```
 
----
+Outputs per image: an overlay figure and a row in `predictions/measurements.csv`.
 
-## 🖼️ Inference & Visualization
+## How measurements work (and their limits)
 
-The trained model can be used to:
+- **Areas** are reported in pixels. They are converted to mm² **only** if you pass the real `--pixel-spacing` (mm) from the original DICOM/NIfTI header; JPG/PNG files do not store it.
+- **Hemisphere** uses **radiological convention** (image left = patient's right) and the head's midline, not the image centre. Use `--neurological` if your images follow the other convention.
+- **Midline shift** is a **distance**: the largest horizontal distance between the predicted midline structure and the ideal midline (centre of the head outline). This is an approximation of the clinical measurement and has not been validated against expert readings.
+- Clot and edema overlap is counted once in the lesion percentage.
+- No symptoms, diagnoses or severity grades are produced.
 
-* Generate binary segmentation masks
-* Overlay predictions on MRI slices
-* Assist clinicians in identifying midline shift and edema regions
+## Known limitations
 
-(Optional visualization can be implemented using Matplotlib or OpenCV.)
+- 2D slices only; no 3D volumes.
+- Head outline uses a simple intensity threshold and may fail on unusual backgrounds.
+- The older `.h5` models were trained with the previous script (BCE loss, no early stopping, random image-level split). Retrain with `train_unet.py` before reporting results.
 
----
+## Future work
 
-## 🧩 Tech Stack
-
-* **Python 3.x**
-* **TensorFlow / Keras**
-* **OpenCV**
-* **NumPy**
-* **Scikit-learn**
-
----
-
-## 📈 Future Enhancements
-
-* 🔹 Dice + BCE combined loss
-* 🔹 Data augmentation (Albumentations)
-* 🔹 IoU metric integration
-* 🔹 PyTorch + MONAI implementation
-* 🔹 3D MRI volume support
-* 🔹 Midline deviation measurement (mm)
-* 🔹 Clinical UI integration (Streamlit / PyQt)
-
----
-
----
-
-## ⚠️ Disclaimer
-
-This project is intended for **research and educational purposes only** and should not be used for direct clinical decision-making without regulatory approval.
-
----
-
-⭐ *If you find this repository useful, please consider giving it a star!*
-
+- 3D volumes from NIfTI/DICOM with real voxel spacing
+- Validation of midline-shift estimates against expert measurements
+- PyTorch / MONAI implementation
