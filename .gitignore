@@ -1,8 +1,17 @@
-*.h5
-*.keras
-*.pyc
-.ipynb_checkpoints/
-__pycache__/
+# medical data and trained weights never go to GitHub
 data/
-models/
-predictions/
+nnUNet_raw/
+nnUNet_preprocessed/
+nnUNet_results/
+runs/
+pred/
+*.nii
+*.nii.gz
+*.zip
+*.pt
+*.pth
+*.glb
+!viewer/demo_synthetic.glb
+__pycache__/
+.venv/
+.ipynb_checkpoints/

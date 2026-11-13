@@ -1,8 +1,10 @@
-# PyTorch with CUDA first (Colab already has it; Windows: see pytorch.org), then:
-segmentation-models-pytorch>=0.5
-timm
+# Install PyTorch with CUDA first (Colab already has it), then:
+monai>=1.3
 nibabel
+scikit-image
+scipy
+einops
 numpy
-opencv-python
-matplotlib
 pandas
+matplotlib
+# optional, strongest baseline: pip install nnunetv2
