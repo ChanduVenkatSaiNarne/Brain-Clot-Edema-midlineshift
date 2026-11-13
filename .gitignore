@@ -3,3 +3,6 @@ __pycache__/
 models/
 predictions/
 .ipynb_checkpoints/
+*.h5
+*.keras
+data/

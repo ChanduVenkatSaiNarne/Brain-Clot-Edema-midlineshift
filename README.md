@@ -3,7 +3,7 @@
 A research pipeline that segments **clot**, **edema** and the **midline structure** on 2D axial brain slices with three U-Net models, then reports **lesion areas, affected hemisphere and an estimate of midline shift**.
 
 > **Status: architecture and pipeline complete — awaiting suitable annotated data for training and validation.**
-> The code is ready to train. A prototype was trained on a small public dataset, but its results are **not reported** because that run used an image-level split and had no held-out test set. The models will be retrained and evaluated once a dataset with the right annotations is available (see [Data needed](#data-needed)).
+> The code is ready to train. An early prototype (image-level split, no held-out test set) has been removed; no results are claimed until the models are retrained. The models will be retrained and evaluated once a dataset with the right annotations is available (see [Data needed](#data-needed)).
 >
 > ⚠️ Research and education only. Not for clinical use.
 
@@ -92,7 +92,7 @@ python train_unet.py --images images/ --masks masks/ --target clot --patient-reg
 No symptoms, diagnoses or severity grades are produced.
 
 ```bash
-python predict.py --images DeepLearningModelsh5files/new_images/new_images \
+python predict.py --images <folder of axial slices> \
   --clot-model <clot model> --edema-model <edema model> --midline-model <midline model> \
   --pixel-spacing 0.45
 ```
@@ -125,7 +125,6 @@ Licences and access conditions differ per dataset and will be checked before use
 | `train_unet.py` | Train one U-Net (`--target clot`, `edema` or `midline`) |
 | `predict.py` | Run the three models; save overlays and `measurements.csv` |
 | `measurements.py` | Areas, hemisphere side, midline-shift estimate (NumPy/OpenCV, testable on its own) |
-| `DeepLearningModelsh5files/` | Prototype `.h5` weights from an earlier run and sample slices from a public dataset |
 | `requirements.txt` | Python dependencies |
 
 ## Known limitations
@@ -133,7 +132,6 @@ Licences and access conditions differ per dataset and will be checked before use
 - 2D slices only; no 3D volume analysis yet.
 - Midline shift is an approximation and has **not** been validated against expert measurements.
 - Head outline uses a simple intensity threshold and may fail on unusual images.
-- The prototype `.h5` weights were trained with an earlier script (BCE loss, image-level split, no test set). They are kept for reference only; no performance is claimed for them.
 
 ## Roadmap
 
