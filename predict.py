@@ -9,7 +9,7 @@ Replaces midline_shift_h5_testing_model.py. Changes:
   * runs outside Colab; saves a figure and a CSV per run
 
 Example:
-  python predict.py --images DeepLearningModelsh5files/new_images/new_images \
+  python predict.py --images data/slices \
       --clot-model models/unet_clot_best.keras --edema-model models/unet_edema_best.keras \
       --midline-model models/unet_midline_best.keras --pixel-spacing 0.45
 """
