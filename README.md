@@ -1,141 +1,113 @@
-# Brain Clot, Edema and Midline-Shift Analysis with U-Net
+# Brain Clot, Edema and Midline-Shift Analysis on Head CT
 
-A research pipeline that segments **clot**, **edema** and the **midline structure** on 2D axial brain slices with three U-Net models, then reports **lesion areas, affected hemisphere and an estimate of midline shift**.
+Finds **bleeding (clot / haemorrhage)** on head-CT scans and measures it: **volume in mL, which side, how many slices**.
+Edema and midline-shift models use the same code once suitable labelled data is available.
 
-> **Status: architecture and pipeline complete — awaiting suitable annotated data for training and validation.**
-> The code is ready to train. An early prototype (image-level split, no held-out test set) has been removed; no results are claimed until the models are retrained. The models will be retrained and evaluated once a dataset with the right annotations is available (see [Data needed](#data-needed)).
->
 > ⚠️ Research and education only. Not for clinical use.
 
----
+## Two branches: 2D and 3D
 
-## Pipeline
+| | **`master` (this branch): 2D** | **`3d` branch: 3D** |
+|---|---|---|
+| What it does | Segments the bleed slice by slice, then stacks the slices to measure the whole scan | Segments the whole CT volume at once; exports a 3D model and shows it in VR |
+| Models | U-Net++ on an ImageNet-pretrained EfficientNet-B3 | SegResNet, SwinUNETR, DynUNet (MONAI), plus nnU-Net |
+| Runs on | **Free Google Colab T4** (or any NVIDIA GPU with 8 GB or more) | **Needs a bigger GPU**: 12–16 GB minimum, 24 GB+ recommended (see table) |
+| Status | **Ready to run**: [`colab_clot_2d.ipynb`](colab_clot_2d.ipynb) | Code ready; run when the hardware is available |
+
+### Hardware needed
+
+| Job | 2D (`master`) | 3D (`3d` branch) |
+|---|---|---|
+| Training GPU memory | 6–10 GB (batch 16, 256 px) | SegResNet 12–16 GB; nnU-Net 10 GB or more; SwinUNETR 16 GB minimum, 24–40 GB comfortable |
+| Suitable GPUs | Colab T4 (free), RTX 3060 or better | RTX 3090/4090 (24 GB), A100 (Colab Pro); a T4 only for SegResNet and nnU-Net, slowly |
+| System RAM | about 2–4 GB | 32 GB recommended |
+| Training time | about 1.5–2.5 h on a T4 (estimate) | many hours to days, depending on model and GPU |
+| Running a trained model | any GPU, or CPU (about 1 s per slice) | 4–8 GB GPU |
+| Viewing results | overlay images, 3D Slicer | 3D Slicer; WebXR viewer on a Meta Quest (no PC GPU needed) |
+
+## Data: BHSD
+
+**BHSD** (Brain Hemorrhage Segmentation Dataset; Wu et al., MLMI 2023, [arXiv 2308.11298](https://arxiv.org/abs/2308.11298)):
+192 non-contrast head-CT scans with pixel-level bleed outlines across 5 bleed types, built from the RSNA 2019 Brain CT Hemorrhage Challenge.
+It is downloaded automatically in the notebook (`label_192.zip` on Hugging Face). Cite the paper when you use it, and never commit the data to this repo.
+
+This branch merges the 5 bleed types into one "bleed" mask. The 3D branch can also keep them apart.
+
+## Pipeline (2D)
 
 ```mermaid
 flowchart LR
-    A[Axial brain slice] --> B[Preprocess<br/>grayscale, 256x256, 0-1]
-    B --> C1[U-Net: clot]
-    B --> C2[U-Net: edema]
-    B --> C3[U-Net: midline structure]
-    A --> H[Head outline<br/>+ ideal midline]
-    C1 --> M[Measurements]
-    C2 --> M
-    C3 --> M
-    H --> M
-    M --> O[Areas, hemisphere,<br/>midline-shift estimate,<br/>overlay figure + CSV]
+    A[Head CT volume<br/>NIfTI, HU] --> B[prepare_bhsd.py<br/>reorient, axial slices,<br/>3 CT windows, 256 px]
+    B --> C[train_2d.py<br/>U-Net++ / EfficientNet-B3]
+    C --> D[predict.py]
+    D --> E[Bleed mask NIfTI<br/>volume mL, side,<br/>overlay image, CSV]
 ```
 
-Three separate binary segmentation models share the same architecture, so each can be trained and improved on its own data.
+**Input = 3 CT windows per slice**, like a radiologist switching windows. This also matches ImageNet-pretrained encoders:
 
-## Model architecture (each of the three U-Nets)
-
-```mermaid
-flowchart TB
-    I[Input 256x256x1] --> E1[Enc 1: ConvBlock 32]
-    E1 --> P1[MaxPool] --> E2[Enc 2: ConvBlock 64]
-    E2 --> P2[MaxPool] --> E3[Enc 3: ConvBlock 128]
-    E3 --> P3[MaxPool] --> E4[Enc 4: ConvBlock 256]
-    E4 --> P4[MaxPool] --> BN[Bottleneck: ConvBlock 512 + Dropout 0.3]
-    BN --> U4[UpConv 256 + skip Enc 4 -> ConvBlock 256]
-    U4 --> U3[UpConv 128 + skip Enc 3 -> ConvBlock 128]
-    U3 --> U2[UpConv 64 + skip Enc 2 -> ConvBlock 64]
-    U2 --> U1[UpConv 32 + skip Enc 1 -> ConvBlock 32]
-    U1 --> OUT[1x1 Conv + sigmoid -> mask 256x256x1]
-```
-
-**ConvBlock** = [3×3 Conv (no bias) → BatchNorm → ReLU] × 2
-
-| Stage | Output shape | Parameters |
+| Channel | Window (level / width, HU) | Shows |
 |---|---|---|
-| Input | 256 × 256 × 1 | 0 |
-| Encoder 1–4 (32 → 256 filters, max-pool after each) | 256² × 32 → 16² × 256 | 1,174,560 |
-| Bottleneck (512 filters, dropout 0.3) | 16 × 16 × 512 | 3,543,040 |
-| Decoder 4–1 (2×2 transposed conv + skip + ConvBlock) | 32² × 256 → 256² × 32 | 3,050,720 |
-| Output (1×1 conv, sigmoid) | 256 × 256 × 1 | 33 |
-| **Total** | | **≈ 7.77 M** (5,888 non-trainable BatchNorm) |
+| 1 | brain 40 / 80 | brain tissue and most bleeds |
+| 2 | subdural 80 / 200 | thin bleeds next to the skull |
+| 3 | bone 600 / 2800 | skull and head outline (used to find the midline) |
 
-### Why these choices
-
-| Choice | Reason |
-|---|---|
-| U-Net with skip connections | Keeps fine boundary detail, which matters for small lesions |
-| 4 levels, 16 × 16 bottleneck | Large receptive field so the midline model sees the whole brain width |
-| Batch normalisation | Stable training on small medical datasets |
-| **Dice + BCE loss** | Plain BCE lets small lesions collapse to "all background" |
-| Dropout + augmentation + early stopping | Limits overfitting on limited data |
-
-## Training setup (`train_unet.py`)
+## Model and training
 
 | Setting | Value |
 |---|---|
-| Split | 70 / 15 / 15 train / validation / **held-out test**; `--patient-regex` keeps each patient in one split |
-| Duplicates | Exact duplicate images removed before splitting |
-| Optimiser | Adam, learning rate 1e-4, halved on plateau |
-| Epochs | Up to 300, early stopping (patience 30) on validation Dice; best model saved |
-| Augmentation | Left–right flip (image + mask), brightness ±0.1, contrast 0.9–1.1 |
-| Reported metric | **Per-image Dice on the held-out test set** |
+| Model | U-Net++ decoder on an EfficientNet-B3 encoder pretrained on ImageNet (segmentation-models-pytorch) |
+| Split | **70 / 15 / 15 by scan**: every slice of a scan is in exactly one part |
+| Sampling | Every epoch: all training slices with bleeding plus the same number of random slices without |
+| Loss | BCE + per-slice soft Dice |
+| Optimiser | AdamW, one-cycle learning rate up to 3e-4, up to 60 epochs, early stopping (patience 15) |
+| Augmentation | Flip, rotation ±15°, zoom 0.85–1.15, shift ±8 %, contrast and brightness |
+| Prediction | Average with the mirrored slice (test-time augmentation); specks under 10 pixels removed |
+| Model selection | Best **3D Dice** on the validation scans |
 
-```bash
-pip install -r requirements.txt
-python train_unet.py --images images/ --masks masks/ --target clot --patient-regex '^(P\d+)_'
-```
+### Reported on the held-out test scans
+- **3D Dice** per scan (all slices stacked): mean and median
+- **Bleed volume** predicted vs expert: mean absolute error in mL and correlation
+- **Slice detection**: sensitivity and specificity for "this slice shows bleeding"
 
-## Measurements (`measurements.py`)
+Results will be added here after the first full run.
+
+## Measurements (`measurements.py`, `predict.py`)
 
 | Output | Method |
 |---|---|
-| Lesion area | Pixel count; **mm² only when real pixel spacing is given** (`--pixel-spacing` from DICOM/NIfTI) |
-| Affected side | Majority side of the lesion relative to the head midline, in **radiological convention** (image left = patient's right) |
-| Midline shift | **Distance** (px or mm): largest horizontal offset between the predicted midline structure and the ideal midline (centre of the head outline) |
-| Lesion burden | % of head area covered by clot **or** edema (overlap counted once) |
+| Bleed volume | Predicted pixels × real pixel area × slice thickness, from the NIfTI header (mL) |
+| Side | Bleed pixels left/right of the head's centre line, in **radiological convention**; "both sides" if each side has more than 20 % |
+| Midline shift | `measurements.midline_shift` needs a midline-structure mask: **awaiting labelled data** |
+| Edema | Same model and code with edema masks: **awaiting labelled data** |
 
 No symptoms, diagnoses or severity grades are produced.
 
+## Run it
+
+**Colab:** open `colab_clot_2d.ipynb` → *Runtime → T4 GPU* → run the cells in order.
+
+**Command line:**
 ```bash
-python predict.py --images <folder of axial slices> \
-  --clot-model <clot model> --edema-model <edema model> --midline-model <midline model> \
-  --pixel-spacing 0.45
+pip install -r requirements.txt          # after installing PyTorch with CUDA
+python prepare_bhsd.py --src data/bhsd --out data/bhsd_256
+python train_2d.py --data data/bhsd_256 --out models/clot
+python predict.py --ckpt models/clot/clot_best.pt --ct scan.nii.gz --out predictions/
 ```
 
-## Data needed
-
-To train and validate properly, the pipeline needs:
-
-1. **Pixel-level masks** for clot/haemorrhage and edema
-2. **Midline-shift ground truth** (expert measurements in mm, or midline annotations)
-3. **Patient IDs**, so slices from one patient stay in one split
-4. **Pixel spacing** (DICOM or NIfTI), so areas and shift can be reported in mm
-
-Candidate public datasets being evaluated (head CT):
-
-| Dataset | What it offers |
-|---|---|
-| CQ500 | Scan-level radiologist labels for haemorrhage types, **midline shift** and mass effect (three readers) |
-| Seg-CQ500 | Haemorrhage segmentation masks for 51 CQ500 scans |
-| PhysioNet CT-ICH | 82 CT scans with haemorrhage masks |
-| INSTANCE 2022 | 130 CT scans with haemorrhage masks |
-| BHSD | 192 3D CT volumes with pixel-level multi-class haemorrhage masks |
-
-Licences and access conditions differ per dataset and will be checked before use.
-
-## Repository structure
+## Files
 
 | File | Purpose |
 |---|---|
-| `train_unet.py` | Train one U-Net (`--target clot`, `edema` or `midline`) |
-| `predict.py` | Run the three models; save overlays and `measurements.csv` |
-| `measurements.py` | Areas, hemisphere side, midline-shift estimate (NumPy/OpenCV, testable on its own) |
-| `requirements.txt` | Python dependencies |
+| `data_ct.py` | NIfTI reading and reorientation, CT windows, slice extraction, split by scan |
+| `prepare_bhsd.py` | BHSD (or any image/mask folder pair) → compact `.npz` slice files |
+| `model.py` | U-Net++ / EfficientNet-B3 model, checkpoint loading, prediction with flip TTA |
+| `train_2d.py` | Training, validation by 3D Dice, test metrics |
+| `predict.py` | One CT scan → bleed mask, volume, side, overlay, CSV |
+| `measurements.py` | Head outline, centre line, side, area, midline-shift helper |
+| `colab_clot_2d.ipynb` | Everything in Google Colab |
 
-## Known limitations
+## Limitations
 
-- 2D slices only; no 3D volume analysis yet.
-- Midline shift is an approximation and has **not** been validated against expert measurements.
-- Head outline uses a simple intensity threshold and may fail on unusual images.
-
-## Roadmap
-
-- [ ] Train and evaluate on a public dataset with masks and patient IDs
-- [ ] Validate midline-shift estimates against expert labels (e.g. CQ500)
-- [ ] 3D volumes with real voxel spacing
-- [ ] PyTorch / MONAI version
+- BHSD has 192 labelled scans from one challenge source; results on other hospitals' scanners are unknown.
+- Thick CT slices: the volume is estimated from slices, which is coarser than true 3D.
+- Edema and midline shift are not yet trained or validated.

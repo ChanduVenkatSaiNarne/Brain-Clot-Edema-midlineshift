@@ -1,17 +1,15 @@
-"""Run the clot, edema and midline models on images and report measurements.
+"""Find bleeding (clot) on a head-CT scan and measure it.
 
-Replaces midline_shift_h5_testing_model.py. Changes:
-  * no made-up symptoms, clinical conditions or %-area "severity grades"
-  * midline shift reported as a DISTANCE (estimate), not an area
-  * mm / mm^2 only when the real pixel spacing is given (--pixel-spacing)
-  * hemisphere uses radiological convention and the head's midline
-  * clot/edema overlap is counted once
-  * runs outside Colab; saves a figure and a CSV per run
+  python predict.py --ckpt models/clot/clot_best.pt --ct scan.nii.gz --out predictions/
+  python predict.py --ckpt models/clot/clot_best.pt --ct scan.nii.gz --truth mask.nii.gz --out predictions/
 
-Example:
-  python predict.py --images data/slices \
-      --clot-model models/unet_clot_best.keras --edema-model models/unet_edema_best.keras \
-      --midline-model models/unet_midline_best.keras --pixel-spacing 0.45
+Writes to --out:
+  <case>_clot.nii.gz    predicted bleed mask (RAS orientation; opens over the CT in 3D Slicer / ITK-SNAP)
+  <case>_overlay.png    the 4 slices with the most bleeding, prediction in red (truth in green if given)
+  measurements.csv      bleed volume (mL), side (patient's right/left/both) and number of slices, one row per run
+
+Midline shift and edema need their own trained models (see README: awaiting suitable data).
+Research use only, not for diagnosis.
 """
 
 import argparse
@@ -20,113 +18,101 @@ import os
 
 import cv2
 import numpy as np
+import torch
 
-import measurements as m
-
-IMG_SIZE = 256
-EXTS = (".png", ".jpg", ".jpeg")
-
-
-def load_model(path):
-    import tensorflow as tf
-    return tf.keras.models.load_model(path, compile=False)  # compile=False: no custom loss needed
-
-
-def segment(model, gray):
-    small = cv2.resize(gray, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_AREA) / 255.0
-    prob = model.predict(small[None, ..., None], verbose=0)[0, ..., 0]
-    prob = cv2.resize(prob, (gray.shape[1], gray.shape[0]), interpolation=cv2.INTER_LINEAR)
-    return (prob > 0.5).astype(np.uint8)
-
-
-def overlay(bgr, mask, colour):
-    out = bgr.copy()
-    tint = np.zeros_like(bgr)
-    tint[:] = colour
-    blended = cv2.addWeighted(bgr, 0.6, tint, 0.4, 0)
-    out[mask == 1] = blended[mask == 1]
-    return out
+import measurements as meas
+from data_ct import load_nifti, radiological, stem, volume_to_slices
+from model import load_checkpoint, predict_slices
+from train_2d import remove_small
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--images", required=True, help="Image file or folder")
-    ap.add_argument("--clot-model", required=True)
-    ap.add_argument("--edema-model", required=True)
-    ap.add_argument("--midline-model", required=True)
-    ap.add_argument("--pixel-spacing", type=float, default=None,
-                    help="Real pixel spacing in mm from the DICOM/NIfTI header. Omit if unknown.")
-    ap.add_argument("--neurological", action="store_true",
-                    help="Images use neurological convention (image left = patient left)")
+    ap.add_argument("--ckpt", required=True)
+    ap.add_argument("--ct", required=True, help="Head CT volume (.nii / .nii.gz, values in HU)")
+    ap.add_argument("--truth", help="Optional expert mask for comparison")
     ap.add_argument("--out", default="predictions")
-    args = ap.parse_args()
+    ap.add_argument("--threshold", type=float, default=0.5)
+    a = ap.parse_args()
 
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    import nibabel as nib
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model, ck = load_checkpoint(a.ckpt, device)
+    size = ck["size"]
 
-    files = ([os.path.join(args.images, f) for f in sorted(os.listdir(args.images))
-              if f.lower().endswith(EXTS)] if os.path.isdir(args.images) else [args.images])
-    models = {k: load_model(p) for k, p in
-              [("clot", args.clot_model), ("edema", args.edema_model), ("midline", args.midline_model)]}
-    os.makedirs(args.out, exist_ok=True)
-    radiological = not args.neurological
-    unit = "mm" if args.pixel_spacing else "px"
-    rows = []
+    img = load_nifti(a.ct)
+    hu = np.asanyarray(img.dataobj).astype(np.float32)
+    hu = hu[..., 0] if hu.ndim == 4 else hu
+    X, Y, Z = hu.shape
+    images, _ = volume_to_slices(hu, np.zeros(hu.shape, np.uint8), size)
+    prob = predict_slices(model, images, device)
+    pred = np.stack([remove_small(p, a.threshold, ck.get("min_px", 10)) for p in prob])     # (Z, size, size)
 
-    for path in files:
-        bgr = cv2.imread(path)
-        if bgr is None:
-            print(f"Skipping unreadable file: {path}")
+    # measurements on the resized slices, converted with the real pixel size
+    sx, sy, sz = img.header.get_zooms()[:3]
+    px_mm2 = (sy * Y / size) * (sx * X / size)
+    volume_ml = float(pred.sum() * px_mm2 * sz / 1000)
+    right = left = 0
+    for k in np.where(pred.reshape(Z, -1).any(1))[0]:
+        head = meas.brain_mask(images[k, 2])                 # bone window shows the skull outline best
+        mid = meas.ideal_midline_x(head)
+        if mid is None:
             continue
-        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-        masks = {k: segment(mdl, gray) for k, mdl in models.items()}
-        head = m.brain_mask(gray)
-        mid_x = m.ideal_midline_x(head)
-        shift = m.midline_shift(masks["midline"], mid_x, args.pixel_spacing)
-        clot_a = m.area(masks["clot"], args.pixel_spacing)
-        edema_a = m.area(masks["edema"], args.pixel_spacing)
-        row = {
-            "image": os.path.basename(path),
-            "clot_area_px": clot_a["pixels"], "clot_area_mm2": clot_a["mm2"],
-            "clot_side": m.side(masks["clot"], mid_x, radiological),
-            "edema_area_px": edema_a["pixels"], "edema_area_mm2": edema_a["mm2"],
-            "edema_side": m.side(masks["edema"], mid_x, radiological),
-            "lesion_percent_of_head": m.lesion_fraction(masks["clot"], masks["edema"], head),
-            "midline_shift_px": shift["pixels"], "midline_shift_mm": shift["mm"],
-            "midline_shift_direction": shift["direction"],
-        }
-        rows.append(row)
+        cols = np.where(pred[k])[1]
+        right += int((cols < mid).sum())                     # radiological: image left = patient's right
+        left += int((cols >= mid).sum())
+    if right + left == 0:
+        side = "none"
+    elif min(right, left) / (right + left) > 0.2:
+        side = "both sides"
+    else:
+        side = "patient's right" if right > left else "patient's left"
 
-        shift_val = shift["mm"] if args.pixel_spacing else shift["pixels"]
-        shift_txt = "not measurable" if shift_val is None else f"{shift_val:.1f} {unit} (estimate)"
-        panels = [
-            (bgr, "Original"),
-            (overlay(bgr, masks["clot"], (0, 0, 255)), f"Clot – {row['clot_side']}"),
-            (overlay(bgr, masks["edema"], (0, 255, 255)), f"Edema – {row['edema_side']}"),
-            (overlay(bgr, masks["midline"], (0, 255, 0)), f"Midline shift: {shift_txt}"),
-        ]
-        fig, axs = plt.subplots(1, 4, figsize=(20, 5))
-        for ax, (im, title) in zip(axs, panels):
-            ax.imshow(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
-            if mid_x is not None:
-                ax.axvline(mid_x, color="white", lw=0.8, ls="--")
-            ax.set_title(title, fontsize=10)
-            ax.axis("off")
-        fig.suptitle("Research output only – not for clinical use", fontsize=9)
-        fig.tight_layout()
-        fig.savefig(os.path.join(args.out, os.path.splitext(row["image"])[0] + "_pred.png"), dpi=120)
-        plt.close(fig)
-        print(f"{row['image']}: clot {clot_a['pixels']} px ({row['clot_side']}), "
-              f"edema {edema_a['pixels']} px ({row['edema_side']}), midline shift {shift_txt}")
+    # save the mask back in the scan's own grid (inverse of data_ct.radiological + resize)
+    mask_vol = np.zeros((X, Y, Z), np.uint8)
+    for k in range(Z):
+        disp = cv2.resize(pred[k], (X, Y), interpolation=cv2.INTER_NEAREST)       # (rows=Y, cols=X)
+        mask_vol[:, :, k] = np.fliplr(np.flipud(disp)).T
+    os.makedirs(a.out, exist_ok=True)
+    case = stem(a.ct)
+    nib.save(nib.Nifti1Image(mask_vol, img.affine), os.path.join(a.out, f"{case}_clot.nii.gz"))
 
-    if rows:
-        with open(os.path.join(args.out, "measurements.csv"), "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+    truth_ml, dice = None, None
+    gt_slices = None
+    if a.truth:
+        t = np.rint(np.asanyarray(load_nifti(a.truth).dataobj)) > 0
+        _, gt_slices = volume_to_slices(hu, t.astype(np.uint8), size)
+        gt_slices = (gt_slices > 0).astype(np.uint8)
+        truth_ml = float(gt_slices.sum() * px_mm2 * sz / 1000)
+        s = pred.sum() + gt_slices.sum()
+        dice = 1.0 if s == 0 else float(2 * (pred & gt_slices).sum() / s)
+
+    # overlay figure: 4 slices with the most predicted (or true) bleeding
+    score = pred.reshape(Z, -1).sum(1) + (gt_slices.reshape(Z, -1).sum(1) if gt_slices is not None else 0)
+    tiles = []
+    for k in np.argsort(score)[::-1][:4]:
+        rgb = cv2.cvtColor(images[k, 0], cv2.COLOR_GRAY2BGR)
+        cnts, _ = cv2.findContours(pred[k], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        cv2.drawContours(rgb, cnts, -1, (0, 0, 255), 1)
+        if gt_slices is not None:
+            cnts, _ = cv2.findContours(gt_slices[k], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            cv2.drawContours(rgb, cnts, -1, (0, 255, 0), 1)
+        cv2.putText(rgb, f"slice {k}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        tiles.append(rgb)
+    cv2.imwrite(os.path.join(a.out, f"{case}_overlay.png"), np.hstack(tiles))
+
+    row = {"case": case, "bleed_volume_ml": round(volume_ml, 2), "side": side,
+           "slices_with_bleed": int(pred.reshape(Z, -1).any(1).sum()),
+           "truth_volume_ml": None if truth_ml is None else round(truth_ml, 2),
+           "dice_3d": None if dice is None else round(dice, 3)}
+    path = os.path.join(a.out, "measurements.csv")
+    new = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(row))
+        if new:
             w.writeheader()
-            w.writerows(rows)
-    if not args.pixel_spacing:
-        print("Note: no --pixel-spacing given, so sizes are in pixels, not mm.")
+        w.writerow(row)
+    print(row, "- research use only")
 
 
 if __name__ == "__main__":
