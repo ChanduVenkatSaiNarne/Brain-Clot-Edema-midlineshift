@@ -1,5 +1,8 @@
-tensorflow>=2.13
+# PyTorch with CUDA first (Colab already has it; Windows: see pytorch.org), then:
+segmentation-models-pytorch>=0.5
+timm
+nibabel
 numpy
 opencv-python
-scikit-learn
 matplotlib
+pandas

@@ -1,8 +1,8 @@
-__pycache__/
-*.pyc
-models/
-predictions/
-.ipynb_checkpoints/
 *.h5
 *.keras
+*.pyc
+.ipynb_checkpoints/
+__pycache__/
 data/
+models/
+predictions/
