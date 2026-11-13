@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain 3D / VR viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101318; color: #e8eaed; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #panel { position: absolute; top: 12px; left: 12px; width: 270px; padding: 12px 14px; background: rgba(20,24,31,.88);
+           border: 1px solid #2c333d; border-radius: 10px; z-index: 2; }
+  #panel h1 { font-size: 15px; margin: 0 0 6px; }
+  #panel p { margin: 4px 0 10px; color: #9aa4b1; font-size: 12px; }
+  #layers label { display: flex; align-items: center; gap: 8px; margin: 4px 0; cursor: pointer; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  button, .file { background: #2b6cb0; color: #fff; border: 0; border-radius: 6px; padding: 7px 10px; margin: 3px 4px 3px 0;
+                  font-size: 13px; cursor: pointer; display: inline-block; }
+  button:disabled { background: #444b55; cursor: default; }
+  .file input { display: none; }
+  #note { position: absolute; bottom: 10px; left: 12px; right: 12px; text-align: center; color: #7d8794; font-size: 12px; z-index: 2; }
+  #drop { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 22px;
+          background: rgba(43,108,176,.25); z-index: 3; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1>Brain 3D / VR viewer</h1>
+  <p id="title">Loading…</p>
+  <label class="file">Open .glb<input id="file" type="file" accept=".glb,.gltf"></label>
+  <button id="vr" disabled>Enter VR</button>
+  <button id="ar" disabled>Passthrough (AR)</button>
+  <div id="layers"></div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:8px">Brain/skull opacity
+    <input id="ctxop" type="range" min="0" max="0.6" step="0.02" value="0.12"></label>
+  <p>Desktop: drag to rotate, scroll to zoom. VR: hold the trigger to grab and turn the model; press grip to hide/show the brain surface.</p>
+</div>
+<div id="note">Research visualisation only, not for diagnosis.</div>
+<div id="drop">Drop a .glb file</div>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const bg = new THREE.Color(0x101318);
+scene.background = bg;
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 50);
+camera.position.set(0, 1.4, 0.45);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.3, -0.4);
+controls.update();
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(1, 3, 2); scene.add(sun);
+
+const holder = new THREE.Group();          // what the user grabs and turns
+holder.position.set(0, 1.3, -0.4);
+scene.add(holder);
+let model = null, contextMeshes = [];
+
+const MODEL_SCALE = 2.5;                    // real brain ~15 cm -> ~37 cm, comfortable to inspect
+const CONTEXT_NAMES = ["Brain", "Skull"];
+
+function setModel(gltf, label) {
+  if (model) holder.remove(model);
+  model = gltf.scene;
+  model.scale.setScalar(MODEL_SCALE);
+  const box = new THREE.Box3().setFromObject(model);
+  model.position.sub(box.getCenter(new THREE.Vector3()));
+  holder.add(model);
+  holder.rotation.set(0, 0, 0);
+  contextMeshes = [];
+  const layers = document.getElementById("layers");
+  layers.innerHTML = "";
+  model.children.forEach(node => {
+    node.renderOrder = CONTEXT_NAMES.includes(node.name) ? 10 : 0;    // see-through surface drawn last
+    let colour = "#ccc";
+    node.traverse(o => {
+      if (o.isMesh) {
+        colour = "#" + o.material.color.getHexString();
+        if (CONTEXT_NAMES.includes(node.name)) { o.material.depthWrite = false; contextMeshes.push(o); }
+      }
+    });
+    const row = document.createElement("label");
+    row.innerHTML = `<input type="checkbox" checked><span class="sw" style="background:${colour}"></span>${node.name}`;
+    row.querySelector("input").onchange = e => { node.visible = e.target.checked; };
+    layers.appendChild(row);
+  });
+  document.getElementById("title").textContent = label;
+}
+
+const loader = new GLTFLoader();
+function loadUrl(url, label) {
+  loader.load(url, g => setModel(g, label), undefined,
+              e => { document.getElementById("title").textContent = "Could not load " + url; console.error(e); });
+}
+function loadFile(file) {
+  file.arrayBuffer().then(buf => loader.parse(buf, "", g => setModel(g, file.name)));
+}
+const param = new URLSearchParams(location.search).get("model");
+loadUrl(param || "demo_synthetic.glb", param || "Synthetic demo (not patient data)");
+
+document.getElementById("file").onchange = e => e.target.files[0] && loadFile(e.target.files[0]);
+const drop = document.getElementById("drop");
+addEventListener("dragover", e => { e.preventDefault(); drop.style.display = "flex"; });
+addEventListener("dragleave", () => { drop.style.display = "none"; });
+addEventListener("drop", e => { e.preventDefault(); drop.style.display = "none"; e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); });
+document.getElementById("ctxop").oninput = e => contextMeshes.forEach(m => { m.material.opacity = +e.target.value; });
+
+// ---------------- WebXR: VR and passthrough AR (Meta Quest browser, other WebXR headsets)
+async function setupXR(mode, id) {
+  const btn = document.getElementById(id);
+  if (!navigator.xr || !(await navigator.xr.isSessionSupported(mode).catch(() => false))) {
+    btn.textContent += " (not available)"; return;
+  }
+  btn.disabled = false;
+  btn.onclick = async () => {
+    if (renderer.xr.getSession()) { renderer.xr.getSession().end(); return; }
+    const session = await navigator.xr.requestSession(mode, { optionalFeatures: ["local-floor"] });
+    scene.background = mode === "immersive-ar" ? null : bg;
+    session.addEventListener("end", () => { scene.background = bg; btn.textContent = btn.dataset.label; });
+    btn.dataset.label = btn.textContent; btn.textContent = "Exit";
+    renderer.xr.setReferenceSpaceType("local-floor");
+    await renderer.xr.setSession(session);
+  };
+}
+setupXR("immersive-vr", "vr");
+setupXR("immersive-ar", "ar");
+
+const factory = new XRControllerModelFactory();
+for (let i = 0; i < 2; i++) {
+  const ctrl = renderer.xr.getController(i);
+  const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -0.3)]),
+                             new THREE.LineBasicMaterial({ color: 0x88aaff }));
+  ctrl.add(ray);
+  ctrl.addEventListener("selectstart", () => ctrl.attach(holder));     // grab: model follows the hand
+  ctrl.addEventListener("selectend", () => scene.attach(holder));      // release where it is
+  ctrl.addEventListener("squeezestart", () => contextMeshes.forEach(m => { m.visible = !m.visible; }));
+  scene.add(ctrl);
+  const grip = renderer.xr.getControllerGrip(i);
+  grip.add(factory.createControllerModel(grip));
+  scene.add(grip);
+}
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => { if (!renderer.xr.isPresenting) controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
