@@ -35,6 +35,16 @@ Each entry records the question, what was run, what came out and what it changed
 
 **Decision.** Before changing the model, find out which scans fail (error analysis by bleed size and type). Then try the cheap fixes for sensitivity: lower probability threshold and smaller `--min-px`, chosen on the validation scans, not the test scans.
 
+## Plan to raise the score (one change per run, compared on validation)
+
+| Step | Change | Why | Cost |
+|---|---|---|---|
+| A | Tune threshold and `--min-px` on validation (`tune_clot.py`) | Win back sensitivity without retraining | 5 min |
+| B | Tversky / focal loss that weights missed bleed more | Model is too cautious (sens 0.76) | 1 run |
+| C | 2.5D input: neighbouring slices as extra channels | Faint bleeds are clearer with context above and below | 1 run |
+| D | 384 or 512 px instead of 256 | Small bleeds lose pixels at 256 | 1 run, slower |
+| E | Average 3 to 5 models (seeds or CV folds) | Usually a steady gain | several runs |
+
 ## Planned experiments
 
 | Order | Question | Plan |
