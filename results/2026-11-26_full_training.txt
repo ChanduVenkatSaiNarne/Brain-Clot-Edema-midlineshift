@@ -4,3 +4,6 @@ Model: unetplusplus + efficientnet-b3 (ImageNet) | parameters: 13,624,793
 
 Early stopping: no improvement for 15 epochs
 TEST (30 scans) | 3D Dice 0.628 (median 0.756) | volume error 12.2 mL (r = 0.90) | slice sensitivity 0.756, specificity 0.965
+
+Section 8 (test_results.json summary, full precision):
+{'dice_3d_mean': 0.628219544068077, 'dice_3d_median': 0.7564822883876345, 'volume_mae_ml': 12.227915418210129, 'volume_r': 0.896747506095189, 'slice_sensitivity': 0.7561643835616438, 'slice_specificity': 0.9651741293532339, 'n_scans': 30, 'model': 'unetplusplus', 'encoder': 'efficientnet-b3'}
