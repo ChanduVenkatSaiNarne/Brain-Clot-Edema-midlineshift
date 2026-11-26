@@ -1,0 +1,6 @@
+Full training run (Colab L4), finished 2026-11-26
+192 scans -> train 134, val 28, test 30
+Model: unetplusplus + efficientnet-b3 (ImageNet) | parameters: 13,624,793
+
+Early stopping: no improvement for 15 epochs
+TEST (30 scans) | 3D Dice 0.628 (median 0.756) | volume error 12.2 mL (r = 0.90) | slice sensitivity 0.756, specificity 0.965

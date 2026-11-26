@@ -22,11 +22,18 @@ Each entry records the question, what was run, what came out and what it changed
 
 **Next.** Full training. If specificity stays low, raise the minimum speck size (`--min-px`), which only needs prediction to be rerun.
 
-## 2026-11-26: full training (running)
+## 2026-11-26: full training
 
 **Setup.** The same model on an L4 GPU, up to 60 epochs with early stopping. The data has 192 scans (134 training, 28 validation, 30 test); the training scans contain 1,633 slices with bleeding and 2,840 without.
 
-**Status.** Running. Results will be added here and to the README.
+**Result.** Early stopping after 15 epochs with no validation improvement. Test (30 scans): 3D Dice 0.628 (median 0.756), volume error 12.2 mL (r = 0.90), slice sensitivity 0.756, specificity 0.965.
+
+**What it tells me.**
+- Compared with the 2-epoch test, overlap and volume both improved (Dice +0.08, volume error 14.8 → 12.2 mL, r 0.83 → 0.90).
+- Specificity jumped from 0.78 to 0.97 but sensitivity dropped from 0.87 to 0.76. The model became cautious: it misses some bleeding slices, most likely the small, thin or faint ones at the edges of a bleed.
+- Mean Dice is well below the median, so a handful of scans score very low. Those are probably small bleeds, where a few missed pixels cost a lot of Dice.
+
+**Decision.** Before changing the model, find out which scans fail (error analysis by bleed size and type). Then try the cheap fixes for sensitivity: lower probability threshold and smaller `--min-px`, chosen on the validation scans, not the test scans.
 
 ## Planned experiments
 

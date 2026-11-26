@@ -8,16 +8,16 @@ Every experiment is recorded in [RESEARCH_LOG.md](RESEARCH_LOG.md), and the raw 
 
 ## Results so far
 
-The quick 2-epoch test on 17 November confirmed that the whole pipeline works on real data. On the 30 held-out test scans it reached:
+Full training ran on 26 November on an L4 GPU and stopped early after 15 epochs without improvement. On the 30 held-out test scans, never seen in training or model selection:
 
-| Measure | After 2 epochs |
-|---|---|
-| 3D Dice per scan | 0.550 mean, 0.659 median |
-| Bleed volume error | 14.8 mL on average, correlation r = 0.83 with the expert volume |
-| Slices with bleeding that were found (sensitivity) | 0.874 |
-| Bleed-free slices correctly left empty (specificity) | 0.779 |
+| Measure | Quick test (2 epochs) | Full training |
+|---|---|---|
+| 3D Dice per scan | 0.550 mean, 0.659 median | **0.628 mean, 0.756 median** |
+| Bleed volume error | 14.8 mL, r = 0.83 | **12.2 mL, r = 0.90** |
+| Slices with bleeding that were found (sensitivity) | 0.874 | 0.756 |
+| Bleed-free slices correctly left empty (specificity) | 0.779 | **0.965** |
 
-Full training started on 26 November on an L4 GPU. Its results will replace this table.
+The gap between mean and median Dice means most scans are segmented well and a few small or faint bleeds pull the mean down. Full training traded some slice sensitivity for far fewer false alarms. Raising sensitivity without losing that specificity is the next thing to work on (see the research log).
 
 ## Two branches
 
