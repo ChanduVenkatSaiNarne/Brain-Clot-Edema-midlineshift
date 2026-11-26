@@ -33,6 +33,8 @@ Each entry records the question, what was run, what came out and what it changed
 - Specificity jumped from 0.78 to 0.97 but sensitivity dropped from 0.87 to 0.76. The model became cautious: it misses some bleeding slices, most likely the small, thin or faint ones at the edges of a bleed.
 - Mean Dice is well below the median, so a handful of scans score very low. Those are probably small bleeds, where a few missed pixels cost a lot of Dice.
 
+**Example test scan** (`results/figures/2026-11-26_test_scan_example.png`, red = model, green = expert). A large haemorrhage on four slices (12 to 15). The outlines almost coincide on every slice, including the darker pockets inside the clot. One small false positive on slice 13 at the edge of the skull near the temporal bone, where bright bone next to brain can look like blood. This is the kind of speck that a higher `--min-px` or a brain mask would remove, so the threshold tuning has to balance it against small real bleeds.
+
 **Decision.** Before changing the model, find out which scans fail (error analysis by bleed size and type). Then try the cheap fixes for sensitivity: lower probability threshold and smaller `--min-px`, chosen on the validation scans, not the test scans.
 
 ## Plan to raise the score (one change per run, compared on validation)
