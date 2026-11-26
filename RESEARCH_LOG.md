@@ -58,12 +58,40 @@ Dice by bleed size (tuned): under 5 mL 0.324 (7 scans), 5 to 30 mL 0.719 (12 sca
 
 **Decision.** Next run: crop each scan to the head before resizing (`prepare_bhsd.py --crop`). Same model, same settings, same test scans; only the preprocessing changes. On a synthetic check, a small bleed went from 50 to 220 pixels with nothing cut off.
 
+## 2026-11-26: crop to the head (experiment A2)
+
+**Hypothesis.** Small bleeds fail because they are only a few pixels at 256 px. Cropping to the head first gives them more pixels and should raise small-bleed Dice.
+
+**Setup.** `prepare_bhsd.py --crop`, everything else identical (same split, model, settings). One scan lost 32 bleed voxels at the crop edge (negligible). Training stopped early at epoch 39 (best val Dice 0.616 at epoch 24). Raw output: `results/2026-11-26_crop_experiment.txt`.
+
+**Result (test, 30 scans, each with its own tuned threshold).**
+
+| | Original | Cropped |
+|---|---|---|
+| 3D Dice | 0.632 (median 0.747) | 0.626 (median 0.720) |
+| Volume error | 10.9 mL, r = 0.91 | 13.7 mL, r = 0.86 |
+| Sensitivity / specificity | 0.811 / 0.925 | 0.770 / 0.957 |
+| Dice, bleeds under 5 mL (7 scans) | 0.324 | 0.399 |
+| Dice, 5 to 30 mL (12 scans) | 0.719 | 0.683 |
+| Dice, over 30 mL (11 scans) | 0.732 | 0.707 |
+
+**What it tells me.**
+- Partly confirmed: small bleeds improved (+0.075), but medium and large bleeds got slightly worse, so overall nothing changed.
+- A new failure appeared: a 162 mL bleed was predicted as 21.8 mL (Dice 0.21). One big miss like this is enough to drop the volume correlation from 0.91 to 0.86.
+- With only 7 small-bleed scans and validation Dice jumping between 0.47 and 0.62 from epoch to epoch, a single run cannot separate a 0.03 to 0.07 change from noise. One-off comparisons are not reliable enough for the paper.
+
+**Decision.**
+1. Keep the original (uncropped) preprocessing as the default. `--crop` stays as an option.
+2. Look at the 162 mL scan to understand why the cropped model missed it.
+3. From now on, judge changes with more than one run (3 seeds, or 5-fold CV by scan) and report mean ± SD.
+4. Next change should be one expected to help more: 2.5D input (neighbouring slices).
+
 ## Plan to raise the score (one change per run, compared on validation)
 
 | Step | Change | Why | Cost |
 |---|---|---|---|
 | A | Tune threshold and `--min-px` on validation (`tune_clot.py`) | Win back sensitivity without retraining | done: small gain |
-| A2 | Crop to the head before resizing (`--crop`) | Small bleeds get 2 to 4 times more pixels | 1 run, next |
+| A2 | Crop to the head before resizing (`--crop`) | Small bleeds get 2 to 4 times more pixels | done: small bleeds +0.08, others slightly worse, overall no gain |
 | B | Tversky / focal loss that weights missed bleed more | Model is too cautious (sens 0.76) | 1 run |
 | C | 2.5D input: neighbouring slices as extra channels | Faint bleeds are clearer with context above and below | 1 run |
 | D | 384 or 512 px instead of 256 | Small bleeds lose pixels at 256 | 1 run, slower |

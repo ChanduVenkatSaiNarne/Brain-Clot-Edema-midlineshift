@@ -1,0 +1,104 @@
+Experiment: crop to head before resizing (prepare_bhsd.py --crop), Colab L4, 2026-11-26
+
+Preparation: 192 scans, 6404 slices (2368 with bleeding); one scan (ID_5f53ab26_ID_f1c7d54a53) lost 32 bleed voxels at the crop edge.
+
+== Training
+Epoch   1 | loss 1.407 | val 3D Dice 0.230 | vol err 38.1 mL | slice sens/spec 1.00/0.00 | lr 8.4e-05 | 51s  * best
+Epoch   2 | loss 1.133 | val 3D Dice 0.340 | vol err 53.0 mL | slice sens/spec 0.99/0.27 | lr 2.3e-04 | 42s  * best
+Epoch   3 | loss 0.932 | val 3D Dice 0.486 | vol err 14.1 mL | slice sens/spec 0.93/0.49 | lr 3.0e-04 | 42s  * best
+Epoch   4 | loss 0.818 | val 3D Dice 0.513 | vol err 15.8 mL | slice sens/spec 0.92/0.69 | lr 3.0e-04 | 42s  * best
+Epoch   5 | loss 0.763 | val 3D Dice 0.555 | vol err 14.3 mL | slice sens/spec 0.89/0.77 | lr 3.0e-04 | 42s  * best
+Epoch   6 | loss 0.713 | val 3D Dice 0.508 | vol err 10.3 mL | slice sens/spec 0.92/0.67 | lr 3.0e-04 | 42s
+Epoch   7 | loss 0.550 | val 3D Dice 0.524 | vol err 11.5 mL | slice sens/spec 0.84/0.83 | lr 3.0e-04 | 42s
+Epoch   8 | loss 0.363 | val 3D Dice 0.509 | vol err 13.3 mL | slice sens/spec 0.61/0.99 | lr 2.9e-04 | 42s
+Epoch   9 | loss 0.338 | val 3D Dice 0.512 | vol err 13.4 mL | slice sens/spec 0.69/0.97 | lr 2.9e-04 | 42s
+Epoch  10 | loss 0.327 | val 3D Dice 0.466 | vol err 27.9 mL | slice sens/spec 0.77/0.91 | lr 2.9e-04 | 42s
+Epoch  11 | loss 0.306 | val 3D Dice 0.519 | vol err 15.3 mL | slice sens/spec 0.67/0.98 | lr 2.9e-04 | 42s
+Epoch  12 | loss 0.304 | val 3D Dice 0.579 | vol err 10.3 mL | slice sens/spec 0.75/0.96 | lr 2.8e-04 | 42s  * best
+Epoch  13 | loss 0.291 | val 3D Dice 0.551 | vol err 18.3 mL | slice sens/spec 0.79/0.95 | lr 2.8e-04 | 42s
+Epoch  14 | loss 0.302 | val 3D Dice 0.552 | vol err 10.9 mL | slice sens/spec 0.74/0.94 | lr 2.7e-04 | 42s
+Epoch  15 | loss 0.285 | val 3D Dice 0.508 | vol err 13.9 mL | slice sens/spec 0.66/0.98 | lr 2.7e-04 | 42s
+Epoch  16 | loss 0.280 | val 3D Dice 0.543 | vol err 10.7 mL | slice sens/spec 0.72/0.95 | lr 2.6e-04 | 42s
+Epoch  17 | loss 0.276 | val 3D Dice 0.573 | vol err 12.8 mL | slice sens/spec 0.77/0.97 | lr 2.6e-04 | 42s
+Epoch  18 | loss 0.278 | val 3D Dice 0.600 | vol err 9.6 mL | slice sens/spec 0.85/0.90 | lr 2.5e-04 | 42s  * best
+Epoch  19 | loss 0.281 | val 3D Dice 0.584 | vol err 11.9 mL | slice sens/spec 0.78/0.94 | lr 2.5e-04 | 42s
+Epoch  20 | loss 0.270 | val 3D Dice 0.538 | vol err 14.2 mL | slice sens/spec 0.74/0.98 | lr 2.4e-04 | 42s
+Epoch  21 | loss 0.265 | val 3D Dice 0.549 | vol err 12.9 mL | slice sens/spec 0.68/0.99 | lr 2.3e-04 | 42s
+Epoch  22 | loss 0.266 | val 3D Dice 0.609 | vol err 12.6 mL | slice sens/spec 0.83/0.95 | lr 2.2e-04 | 42s  * best
+Epoch  23 | loss 0.264 | val 3D Dice 0.576 | vol err 13.6 mL | slice sens/spec 0.80/0.97 | lr 2.2e-04 | 42s
+Epoch  24 | loss 0.256 | val 3D Dice 0.616 | vol err 11.4 mL | slice sens/spec 0.78/0.96 | lr 2.1e-04 | 42s  * best
+Epoch  25 | loss 0.257 | val 3D Dice 0.602 | vol err 12.5 mL | slice sens/spec 0.72/0.99 | lr 2.0e-04 | 42s
+Epoch  26 | loss 0.247 | val 3D Dice 0.578 | vol err 8.9 mL | slice sens/spec 0.79/0.96 | lr 1.9e-04 | 42s
+Epoch  27 | loss 0.252 | val 3D Dice 0.609 | vol err 11.5 mL | slice sens/spec 0.78/0.96 | lr 1.9e-04 | 42s
+Epoch  28 | loss 0.245 | val 3D Dice 0.594 | vol err 10.5 mL | slice sens/spec 0.83/0.95 | lr 1.8e-04 | 42s
+Epoch  29 | loss 0.242 | val 3D Dice 0.605 | vol err 11.2 mL | slice sens/spec 0.81/0.95 | lr 1.7e-04 | 42s
+Epoch  30 | loss 0.248 | val 3D Dice 0.614 | vol err 10.3 mL | slice sens/spec 0.78/0.97 | lr 1.6e-04 | 42s
+Epoch  31 | loss 0.236 | val 3D Dice 0.579 | vol err 11.1 mL | slice sens/spec 0.76/0.96 | lr 1.5e-04 | 42s
+Epoch  32 | loss 0.246 | val 3D Dice 0.584 | vol err 9.3 mL | slice sens/spec 0.77/0.97 | lr 1.5e-04 | 42s
+Epoch  33 | loss 0.227 | val 3D Dice 0.598 | vol err 9.0 mL | slice sens/spec 0.79/0.96 | lr 1.4e-04 | 42s
+Epoch  34 | loss 0.236 | val 3D Dice 0.589 | vol err 11.9 mL | slice sens/spec 0.76/0.98 | lr 1.3e-04 | 42s
+Epoch  35 | loss 0.227 | val 3D Dice 0.567 | vol err 12.0 mL | slice sens/spec 0.78/0.94 | lr 1.2e-04 | 42s
+Epoch  36 | loss 0.229 | val 3D Dice 0.604 | vol err 10.0 mL | slice sens/spec 0.81/0.96 | lr 1.1e-04 | 42s
+Epoch  37 | loss 0.222 | val 3D Dice 0.596 | vol err 10.3 mL | slice sens/spec 0.76/0.97 | lr 1.1e-04 | 42s
+Epoch  38 | loss 0.219 | val 3D Dice 0.593 | vol err 8.7 mL | slice sens/spec 0.81/0.95 | lr 9.7e-05 | 42s
+Epoch  39 | loss 0.220 | val 3D Dice 0.601 | vol err 9.0 mL | slice sens/spec 0.80/0.96 | lr 9.0e-05 | 42s
+Early stopping: no improvement for 15 epochs
+TEST (30 scans) | 3D Dice 0.625 (median 0.720) | volume error 13.8 mL (r = 0.86) | slice sensitivity 0.756, specificity 0.960
+== Threshold tuning (tune_clot.py)
+Computing validation probabilities ...
+val | threshold 0.20 min_px   0 | Dice 0.595 (median 0.627) | vol err 8.8 mL | sens/spec 0.870/0.902
+val | threshold 0.20 min_px   5 | Dice 0.596 (median 0.627) | vol err 8.8 mL | sens/spec 0.865/0.902
+val | threshold 0.20 min_px  10 | Dice 0.596 (median 0.627) | vol err 8.9 mL | sens/spec 0.862/0.909
+val | threshold 0.20 min_px  20 | Dice 0.595 (median 0.629) | vol err 8.9 mL | sens/spec 0.832/0.914
+val | threshold 0.20 min_px  40 | Dice 0.584 (median 0.631) | vol err 9.1 mL | sens/spec 0.795/0.926
+val | threshold 0.25 min_px   0 | Dice 0.598 (median 0.630) | vol err 9.1 mL | sens/spec 0.868/0.902
+val | threshold 0.25 min_px   5 | Dice 0.598 (median 0.630) | vol err 9.1 mL | sens/spec 0.865/0.904
+val | threshold 0.25 min_px  10 | Dice 0.598 (median 0.630) | vol err 9.1 mL | sens/spec 0.859/0.909
+val | threshold 0.25 min_px  20 | Dice 0.598 (median 0.632) | vol err 9.2 mL | sens/spec 0.832/0.917
+val | threshold 0.25 min_px  40 | Dice 0.584 (median 0.634) | vol err 9.4 mL | sens/spec 0.795/0.929
+val | threshold 0.30 min_px   0 | Dice 0.600 (median 0.632) | vol err 9.3 mL | sens/spec 0.868/0.902
+val | threshold 0.30 min_px   5 | Dice 0.601 (median 0.632) | vol err 9.3 mL | sens/spec 0.865/0.907
+val | threshold 0.30 min_px  10 | Dice 0.601 (median 0.632) | vol err 9.4 mL | sens/spec 0.859/0.914
+val | threshold 0.30 min_px  20 | Dice 0.599 (median 0.633) | vol err 9.4 mL | sens/spec 0.830/0.921
+val | threshold 0.30 min_px  40 | Dice 0.585 (median 0.635) | vol err 9.6 mL | sens/spec 0.789/0.929
+val | threshold 0.35 min_px   0 | Dice 0.603 (median 0.636) | vol err 9.6 mL | sens/spec 0.868/0.907
+val | threshold 0.35 min_px   5 | Dice 0.603 (median 0.636) | vol err 9.6 mL | sens/spec 0.862/0.911
+val | threshold 0.35 min_px  10 | Dice 0.603 (median 0.636) | vol err 9.6 mL | sens/spec 0.857/0.916
+val | threshold 0.35 min_px  20 | Dice 0.601 (median 0.637) | vol err 9.7 mL | sens/spec 0.827/0.922
+val | threshold 0.35 min_px  40 | Dice 0.588 (median 0.638) | vol err 9.9 mL | sens/spec 0.784/0.933
+val | threshold 0.40 min_px   0 | Dice 0.605 (median 0.639) | vol err 9.8 mL | sens/spec 0.865/0.907
+val | threshold 0.40 min_px   5 | Dice 0.605 (median 0.639) | vol err 9.8 mL | sens/spec 0.857/0.914
+val | threshold 0.40 min_px  10 | Dice 0.605 (median 0.639) | vol err 9.9 mL | sens/spec 0.846/0.916
+val | threshold 0.40 min_px  20 | Dice 0.603 (median 0.640) | vol err 10.0 mL | sens/spec 0.819/0.924
+val | threshold 0.40 min_px  40 | Dice 0.587 (median 0.643) | vol err 10.2 mL | sens/spec 0.776/0.938
+val | threshold 0.45 min_px   0 | Dice 0.615 (median 0.641) | vol err 10.3 mL | sens/spec 0.862/0.914
+val | threshold 0.45 min_px   5 | Dice 0.615 (median 0.641) | vol err 10.3 mL | sens/spec 0.857/0.919
+val | threshold 0.45 min_px  10 | Dice 0.615 (median 0.641) | vol err 10.3 mL | sens/spec 0.838/0.927
+val | threshold 0.45 min_px  20 | Dice 0.613 (median 0.641) | vol err 10.4 mL | sens/spec 0.819/0.934
+val | threshold 0.45 min_px  40 | Dice 0.587 (median 0.644) | vol err 10.7 mL | sens/spec 0.773/0.949
+val | threshold 0.50 min_px   0 | Dice 0.621 (median 0.636) | vol err 11.3 mL | sens/spec 0.808/0.951
+val | threshold 0.50 min_px   5 | Dice 0.621 (median 0.636) | vol err 11.4 mL | sens/spec 0.803/0.954
+val | threshold 0.50 min_px  10 | Dice 0.616 (median 0.635) | vol err 11.4 mL | sens/spec 0.784/0.960
+val | threshold 0.50 min_px  20 | Dice 0.616 (median 0.634) | vol err 11.5 mL | sens/spec 0.770/0.961
+val | threshold 0.50 min_px  40 | Dice 0.581 (median 0.630) | vol err 11.9 mL | sens/spec 0.730/0.971
+val | threshold 0.60 min_px   0 | Dice 0.616 (median 0.638) | vol err 12.4 mL | sens/spec 0.800/0.958
+val | threshold 0.60 min_px   5 | Dice 0.615 (median 0.638) | vol err 12.4 mL | sens/spec 0.792/0.963
+val | threshold 0.60 min_px  10 | Dice 0.609 (median 0.637) | vol err 12.4 mL | sens/spec 0.781/0.963
+val | threshold 0.60 min_px  20 | Dice 0.610 (median 0.647) | vol err 12.6 mL | sens/spec 0.768/0.968
+val | threshold 0.60 min_px  40 | Dice 0.563 (median 0.624) | vol err 13.0 mL | sens/spec 0.716/0.981
+
+Best on validation: threshold 0.5, min_px 0 (val Dice 0.621)
+Computing test probabilities ...
+TEST default 0.5 | 3D Dice 0.625 (median 0.720) | volume error 13.8 mL (r = 0.86) | slice sensitivity 0.756, specificity 0.960
+TEST tuned       | 3D Dice 0.626 (median 0.720) | volume error 13.7 mL (r = 0.86) | slice sensitivity 0.770, specificity 0.957
+
+Error analysis (tuned, test scans with bleeding)
+  < 5 mL   |  7 scans | mean Dice 0.399
+  5-30 mL  | 12 scans | mean Dice 0.683
+  > 30 mL  | 11 scans | mean Dice 0.707
+  Worst 5 scans:
+    ID_47aa2b3a_ID_95a9953aba      Dice 0.000 | true 0.2 mL, predicted 2.8 mL
+    ID_55742eb7_ID_7d5ad548ca      Dice 0.159 | true 6.9 mL, predicted 1.0 mL
+    ID_6c85adda_ID_86bc0ab248      Dice 0.181 | true 1.3 mL, predicted 1.4 mL
+    ID_05331dc6_ID_47213b7e2e      Dice 0.207 | true 162.1 mL, predicted 21.8 mL
+    ID_1653b22b_ID_c35cd0de73      Dice 0.213 | true 17.6 mL, predicted 11.3 mL
