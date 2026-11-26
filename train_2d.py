@@ -126,6 +126,8 @@ def main():
     amp = device.type == "cuda"
     print(f"Device: {'GPU - ' + torch.cuda.get_device_name(0) if amp else 'CPU (slow)'}")
     cases = load_cases(args.data)
+    prep_file = os.path.join(args.data, "prep.json")
+    crop = bool(json.load(open(prep_file)).get("crop")) if os.path.exists(prep_file) else False
     tr, va, te = case_split(list(cases))
     os.makedirs(args.out, exist_ok=True)
     json.dump({"train": tr, "val": va, "test": te}, open(os.path.join(args.out, "split.json"), "w"), indent=1)
@@ -181,7 +183,7 @@ def main():
         if v["dice_3d_mean"] > best:
             best, bad, mark = v["dice_3d_mean"], 0, "  * best"
             torch.save({"model": model.state_dict(), "arch": args.arch, "encoder": args.encoder,
-                        "size": int(X.shape[-1]), "min_px": args.min_px, "target": "clot"}, best_path)
+                        "size": int(X.shape[-1]), "min_px": args.min_px, "crop": crop, "target": "clot"}, best_path)
         else:
             bad += 1
         print(f"Epoch {epoch:3d} | loss {total / n:.3f} | val 3D Dice {v['dice_3d_mean']:.3f} "

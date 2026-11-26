@@ -37,11 +37,33 @@ Each entry records the question, what was run, what came out and what it changed
 
 **Decision.** Before changing the model, find out which scans fail (error analysis by bleed size and type). Then try the cheap fixes for sensitivity: lower probability threshold and smaller `--min-px`, chosen on the validation scans, not the test scans.
 
+## 2026-11-26: threshold tuning and error analysis
+
+**Setup.** `tune_clot.py` on the full-training model. 40 threshold / min_px pairs scored on the 28 validation scans; the best pair applied once to the 30 test scans. Raw output: `results/2026-11-26_threshold_tuning.txt`.
+
+**Result.** Best on validation: threshold 0.35, min_px 5.
+
+| Test (30 scans) | Default (0.5, 10 px) | Tuned (0.35, 5 px) |
+|---|---|---|
+| 3D Dice | 0.628 (median 0.756) | 0.632 (median 0.747) |
+| Volume error | 12.2 mL, r = 0.90 | 10.9 mL, r = 0.91 |
+| Slice sensitivity / specificity | 0.756 / 0.965 | 0.811 / 0.925 |
+
+Dice by bleed size (tuned): under 5 mL 0.324 (7 scans), 5 to 30 mL 0.719 (12 scans), over 30 mL 0.732 (11 scans). Four of the five worst scans have bleeds under 7 mL.
+
+**What it tells me.**
+- The threshold barely moves Dice (+0.004) but improves volume error and finds 5% more bleeding slices. Speck size matters little below 20 px.
+- The real problem is small bleeds. Medium and large bleeds are already around 0.72 to 0.73; small ones are at 0.32. On a 0.2 mL bleed, a 3.8 mL false positive gives Dice 0.03, so Dice is also a harsh measure there. I should report detection (found / missed) for small bleeds as well as Dice.
+- At 256 px the whole field of view, including air and the table, is squeezed in, so a small bleed is only a handful of pixels.
+
+**Decision.** Next run: crop each scan to the head before resizing (`prepare_bhsd.py --crop`). Same model, same settings, same test scans; only the preprocessing changes. On a synthetic check, a small bleed went from 50 to 220 pixels with nothing cut off.
+
 ## Plan to raise the score (one change per run, compared on validation)
 
 | Step | Change | Why | Cost |
 |---|---|---|---|
-| A | Tune threshold and `--min-px` on validation (`tune_clot.py`) | Win back sensitivity without retraining | 5 min |
+| A | Tune threshold and `--min-px` on validation (`tune_clot.py`) | Win back sensitivity without retraining | done: small gain |
+| A2 | Crop to the head before resizing (`--crop`) | Small bleeds get 2 to 4 times more pixels | 1 run, next |
 | B | Tversky / focal loss that weights missed bleed more | Model is too cautious (sens 0.76) | 1 run |
 | C | 2.5D input: neighbouring slices as extra channels | Faint bleeds are clearer with context above and below | 1 run |
 | D | 384 or 512 px instead of 256 | Small bleeds lose pixels at 256 | 1 run, slower |

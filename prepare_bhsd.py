@@ -1,6 +1,7 @@
 """Convert BHSD head-CT volumes + masks into compact 2D slice files for training.
 
   python prepare_bhsd.py --src /content/data/bhsd --out /content/data/bhsd_256 --size 256
+  python prepare_bhsd.py --src /content/data/bhsd --out /content/data/bhsd_256_crop --crop   # head cropped first
 
 For each scan writes <out>/<case>.npz with
   images  (Z, 3, size, size) uint8    3 CT windows per slice (see data_ct.py)
@@ -12,11 +13,12 @@ For each scan writes <out>/<case>.npz with
 """
 
 import argparse
+import json
 import os
 
 import numpy as np
 
-from data_ct import find_pairs, load_nifti, stem, volume_to_slices
+from data_ct import find_pairs, head_box, load_nifti, radiological, stem, volume_to_slices
 
 
 def main():
@@ -26,11 +28,13 @@ def main():
     ap.add_argument("--labels")
     ap.add_argument("--out", required=True)
     ap.add_argument("--size", type=int, default=256)
+    ap.add_argument("--crop", action="store_true", help="Crop each scan to the head before resizing")
     a = ap.parse_args()
 
     pairs, img_dir, lab_dir = find_pairs(a.src, a.images, a.labels)
     print(f"images: {img_dir}\nlabels: {lab_dir}\n{len(pairs)} scans")
     os.makedirs(a.out, exist_ok=True)
+    json.dump({"size": a.size, "crop": bool(a.crop)}, open(os.path.join(a.out, "prep.json"), "w"))
     n_slices = n_bleed = 0
     for i, (ip, lp) in enumerate(pairs, 1):
         img, lab = load_nifti(ip), load_nifti(lp)
@@ -41,10 +45,16 @@ def main():
         if seg.shape != hu.shape:
             print(f"skip {stem(ip)}: image {hu.shape} vs mask {seg.shape}")
             continue
-        images, masks = volume_to_slices(hu, seg, a.size)
+        box = head_box(hu) if a.crop else (0, hu.shape[1], 0, hu.shape[0])
+        images, masks = volume_to_slices(hu, seg, a.size, box)
+        lost = int((seg > 0).sum()) - int(sum((radiological(seg[:, :, k])[box[0]:box[1], box[2]:box[3]] > 0).sum()
+                                               for k in range(seg.shape[2])))
+        if lost:
+            print(f"warning {stem(ip)}: crop cut off {lost} bleed voxels")
         spacing = np.array(img.header.get_zooms()[:3], dtype=np.float32)
-        # rows come from the y axis and columns from the x axis (see data_ct.radiological)
-        pixel_mm = np.array([spacing[1] * hu.shape[1] / a.size, spacing[0] * hu.shape[0] / a.size], np.float32)
+        # display rows come from the y axis and columns from the x axis (see data_ct.radiological)
+        rows, cols = box[1] - box[0], box[3] - box[2]
+        pixel_mm = np.array([spacing[1] * rows / a.size, spacing[0] * cols / a.size], np.float32)
         cid = stem(ip).replace(" ", "_")
         np.savez_compressed(os.path.join(a.out, f"{cid}.npz"), images=images, masks=masks,
                             spacing=spacing, pixel_mm=pixel_mm)

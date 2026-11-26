@@ -83,16 +83,36 @@ def find_pairs(src, images=None, labels=None):
     return pairs, images, labels
 
 
-def volume_to_slices(hu_vol, label_vol, size):
-    """RAS volumes (X, Y, Z) -> images (Z, 3, size, size) uint8 and masks (Z, size, size) uint8 (0..5)."""
+def volume_to_slices(hu_vol, label_vol, size, box=None):
+    """RAS volumes (X, Y, Z) -> images (Z, 3, size, size) uint8 and masks (Z, size, size) uint8 (0..5).
+    box = (r0, r1, c0, c1) crops every slice (in display coordinates) before resizing."""
     imgs, masks = [], []
+    r0, r1, c0, c1 = box if box else (0, None, 0, None)
     for k in range(hu_vol.shape[2]):
-        img = radiological(hu_vol[:, :, k].astype(np.float32))
-        lab = radiological(label_vol[:, :, k])
+        img = radiological(hu_vol[:, :, k].astype(np.float32))[r0:r1, c0:c1]
+        lab = radiological(label_vol[:, :, k])[r0:r1, c0:c1]
         ch = to_channels(img)
         imgs.append(np.stack([cv2.resize(c, (size, size), interpolation=cv2.INTER_AREA) for c in ch]))
         masks.append(cv2.resize(lab.astype(np.uint8), (size, size), interpolation=cv2.INTER_NEAREST))
     return np.stack(imgs), np.stack(masks)
+
+
+def head_box(hu_vol, margin=0.05, thresh=-300):
+    """Square crop box (r0, r1, c0, c1) in display coordinates around the head, the same for
+    every slice of the scan. Air and the scanner table are cut away, so after resizing the brain
+    fills more of the image. Falls back to the full slice if nothing is found."""
+    proj = radiological((hu_vol > thresh).any(axis=2).astype(np.uint8))
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(proj, connectivity=8)
+    H, W = proj.shape
+    if n < 2:
+        return 0, H, 0, W
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))          # largest blob = head (table is thin)
+    x, y, w, h = stats[k, :4]
+    side = int(max(w, h) * (1 + 2 * margin))
+    side = min(side, max(H, W))
+    cy, cx = y + h // 2, x + w // 2
+    r0 = int(np.clip(cy - side // 2, 0, max(H - side, 0))); c0 = int(np.clip(cx - side // 2, 0, max(W - side, 0)))
+    return r0, min(r0 + side, H), c0, min(c0 + side, W)
 
 
 def case_split(case_ids, seed=42, frac=(0.70, 0.15, 0.15)):

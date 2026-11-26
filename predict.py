@@ -21,7 +21,7 @@ import numpy as np
 import torch
 
 import measurements as meas
-from data_ct import load_nifti, radiological, stem, volume_to_slices
+from data_ct import head_box, load_nifti, radiological, stem, volume_to_slices
 from model import load_checkpoint, predict_slices
 from train_2d import remove_small
 
@@ -44,13 +44,15 @@ def main():
     hu = np.asanyarray(img.dataobj).astype(np.float32)
     hu = hu[..., 0] if hu.ndim == 4 else hu
     X, Y, Z = hu.shape
-    images, _ = volume_to_slices(hu, np.zeros(hu.shape, np.uint8), size)
+    box = head_box(hu) if ck.get("crop") else (0, Y, 0, X)            # same crop as in training
+    rows, cols = box[1] - box[0], box[3] - box[2]
+    images, _ = volume_to_slices(hu, np.zeros(hu.shape, np.uint8), size, box)
     prob = predict_slices(model, images, device)
     pred = np.stack([remove_small(p, a.threshold, ck.get("min_px", 10)) for p in prob])     # (Z, size, size)
 
     # measurements on the resized slices, converted with the real pixel size
     sx, sy, sz = img.header.get_zooms()[:3]
-    px_mm2 = (sy * Y / size) * (sx * X / size)
+    px_mm2 = (sy * rows / size) * (sx * cols / size)
     volume_ml = float(pred.sum() * px_mm2 * sz / 1000)
     right = left = 0
     for k in np.where(pred.reshape(Z, -1).any(1))[0]:
@@ -71,7 +73,8 @@ def main():
     # save the mask back in the scan's own grid (inverse of data_ct.radiological + resize)
     mask_vol = np.zeros((X, Y, Z), np.uint8)
     for k in range(Z):
-        disp = cv2.resize(pred[k], (X, Y), interpolation=cv2.INTER_NEAREST)       # (rows=Y, cols=X)
+        disp = np.zeros((Y, X), np.uint8)                                         # (rows=Y, cols=X)
+        disp[box[0]:box[1], box[2]:box[3]] = cv2.resize(pred[k], (cols, rows), interpolation=cv2.INTER_NEAREST)
         mask_vol[:, :, k] = np.fliplr(np.flipud(disp)).T
     os.makedirs(a.out, exist_ok=True)
     case = stem(a.ct)
@@ -81,7 +84,7 @@ def main():
     gt_slices = None
     if a.truth:
         t = np.rint(np.asanyarray(load_nifti(a.truth).dataobj)) > 0
-        _, gt_slices = volume_to_slices(hu, t.astype(np.uint8), size)
+        _, gt_slices = volume_to_slices(hu, t.astype(np.uint8), size, box)
         gt_slices = (gt_slices > 0).astype(np.uint8)
         truth_ml = float(gt_slices.sum() * px_mm2 * sz / 1000)
         s = pred.sum() + gt_slices.sum()

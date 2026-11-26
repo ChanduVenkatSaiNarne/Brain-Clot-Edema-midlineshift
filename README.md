@@ -17,6 +17,14 @@ Full training ran on 26 November on an L4 GPU and stopped early after 15 epochs 
 | Slices with bleeding that were found (sensitivity) | 0.874 | 0.756 |
 | Bleed-free slices correctly left empty (specificity) | 0.779 | **0.965** |
 
+Tuning the decision threshold on the validation scans (threshold 0.35 instead of 0.5) gives test Dice 0.632, volume error 10.9 mL (r = 0.91), sensitivity 0.811 and specificity 0.925.
+
+| Bleed size (test scans) | Scans | Mean Dice |
+|---|---|---|
+| Under 5 mL | 7 | 0.32 |
+| 5 to 30 mL | 12 | 0.72 |
+| Over 30 mL | 11 | 0.73 |
+
 The gap between mean and median Dice means most scans are segmented well and a few small or faint bleeds pull the mean down. Full training traded some slice sensitivity for far fewer false alarms. Raising sensitivity without losing that specificity is the next thing to work on (see the research log).
 
 ## Two branches
