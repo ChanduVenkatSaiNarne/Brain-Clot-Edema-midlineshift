@@ -1,0 +1,7 @@
+Quick test, 2 epochs (Colab T4)
+Output of notebook section 6, as reported on 2026-11-17.
+
+Model: unetplusplus + efficientnet-b3 (ImageNet) | parameters: 13,624,793
+Epoch   1 | loss 1.140 | val 3D Dice 0.468 | vol err 19.2 mL | slice sens/spec 0.85/0.81 | lr 1.6e-04 | 91s  * best
+Epoch   2 | loss 0.927 | val 3D Dice 0.540 | vol err 11.6 mL | slice sens/spec 0.90/0.73 | lr 6.1e-09 | 81s  * best
+TEST (30 scans) | 3D Dice 0.550 (median 0.659) | volume error 14.8 mL (r = 0.83) | slice sensitivity 0.874, specificity 0.779

@@ -1,0 +1,6 @@
+Full training run, start of output (Colab L4)
+Reported on 2026-11-26. Final results to follow.
+
+Device: GPU - NVIDIA L4
+192 scans -> train 134, val 28, test 30 | train slices: 1633 with bleeding, 2840 without
+Model: unetplusplus + efficientnet-b3 (ImageNet) | parameters: 13,624,793
